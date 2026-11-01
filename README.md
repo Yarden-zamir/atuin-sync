@@ -39,8 +39,13 @@ See [kitshn's backup and restore rules](https://github.com/Yarden-zamir/kitshn/b
 (K-1815–K-1820) for the backup key, storage limits and retention.
 
 Record sync uploads pages of 100 encrypted records as one JSON request, with no
-byte-based split. Atuin's default per-record limit is 1 GiB, so a page can exceed
-Cloudflare's 100 MB request cap. Total database size does not determine request
-size; a large record or page may fail with HTTP 413.
+byte-based split. The default per-record check permits 1 GiB of encrypted text:
+100 records could total 100 GiB plus JSON metadata, exceeding Cloudflare's 100 MB
+cap. In this release, Axum's JSON extractor has an earlier 2 MiB request limit
+(there is no server override), so even a much smaller page can get HTTP 413.
+Total database size does not determine request size. Before importing large
+threads, check serialized upload pages against 2 MiB; oversized pages require a
+client batching or server change. Packfile transfers use a separate blob upload
+path and are not enabled by this server configuration.
 
 MIT licensed.
