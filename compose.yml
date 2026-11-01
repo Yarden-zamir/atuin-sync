@@ -1,6 +1,8 @@
 services:
   server:
-    image: ghcr.io/atuinsh/atuin:18.24.4@sha256:1cb33a7126b748e0ad6d18d0f52e9bb805a98a196feccd597bf66544f58cf68e
+    # The fork image takes a full page of thread records in one upload (upstream answers 413).
+    # Built from the `yarden` branch of github.com/Yarden-zamir/atuin. Update the digest by hand.
+    image: ghcr.io/yarden-zamir/atuin-server:yarden@sha256:541d56876f3cc503aa0033cea40bf99662157b73fd0f873bf2dbe60d29fdb078
     command: ["start"]
     # /data starts owned by root; the deployment machine uses rootless Docker.
     user: "0:0"

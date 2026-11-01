@@ -1,51 +1,50 @@
 # atuin-sync
 
-Private [Atuin](https://atuin.sh/) sync server for encrypted shell history and agent
-threads, deployed by [kitshn 2](https://github.com/Yarden-zamir/kitshn) on the
-always-on VPS. This repository is public; the service is behind Cloudflare Access
-in the owner's **Machines** circle, which permits service tokens without a passkey.
-It is never shared with Everyone.
+A private [Atuin](https://atuin.sh/) sync server for shell history and agent threads.
+[kitshn](https://github.com/Yarden-zamir/kitshn) deploys it on an always-on machine.
+Cloudflare Access guards it, so the card stays in a circle and never in Everyone.
 
-Connect a client using its own kitshn device's Access service token:
+The server image comes from the fork [Yarden-zamir/atuin](https://github.com/Yarden-zamir/atuin/tree/yarden).
+The fork accepts a full page of thread records in one upload.
+Upstream atuin-server answers such a page with 413 ([atuinsh/atuin#2887](https://github.com/atuinsh/atuin/issues/2887) "Sync: Content Too Large").
+
+## Connect a client
+
+The client also comes from the fork, because it reads header values from environment variables.
+
+1. Make a kitshn device token for the machine: `kitshn device-token-add --body '{"name":"atuin <machine>"}'`.
+2. Put the token in a circle that holds this card.
+3. Export the secret in a file that git ignores: `export ATUIN_CF_ACCESS_CLIENT_SECRET=<secret>`.
+4. Add this to the Atuin config:
 
 ```toml
 sync_address = "https://atuin.yarden-zamir.com"
-
-[extra_headers]
-CF-Access-Client-Id = "<device client ID>"
-CF-Access-Client-Secret = "<device client secret>"
+extra_headers = { "CF-Access-Client-Id" = "<client id>" }
+extra_headers_env = { "CF-Access-Client-Secret" = "ATUIN_CF_ACCESS_CLIENT_SECRET" }
 ```
 
-Keep real credentials out of this repository. The device must belong to a circle
-that holds the app. Atuin account registration and authentication are still required.
+5. Run `atuin register` for the first machine, else `atuin login`.
 
-Pushes to `main` deploy `prod`. The first push needs the repo's **Allow** action on
-the kitshn map. `KITSHN_OPEN_REGISTRATION`, a GitHub repository variable, reaches
-Compose as `OPEN_REGISTRATION` (K-808). It defaults to `true` for the first account;
-after registration, set the variable to `false` and run the deploy workflow again.
+## Deploy
 
-The official Atuin `18.24.4` and Alpine socat `1.8.1.3` images are digest-pinned.
-Atuin stores SQLite in the `atuin-data` named volume at `/data/atuin.db`.
-The socket bridge binds `$KITSHN_SOCKET_DIR/default.sock` (K-607); no host port is
-published. Atuin runs as container root to write the fresh volume; the VPS uses
-rootless Docker.
+- A push to `main` deploys `prod`. The first push needs **Allow** on the kitshn map.
+- The GitHub variable `KITSHN_OPEN_REGISTRATION` reaches Compose as `OPEN_REGISTRATION` (K-808).
+  It is `true` for the first account. After you register, set it to `false` and deploy again.
+- Images are pinned by digest. To update the server, copy the new digest of `ghcr.io/yarden-zamir/atuin-server:yarden`.
+- atuin-server listens only on TCP. A socat service bridges `$KITSHN_SOCKET_DIR/default.sock` to it (K-607).
+- SQLite lives in the `atuin-data` volume at `/data/atuin.db`.
 
-kitshn backs up the volume daily to encrypted, deduplicated R2 snapshots (K-1811).
-To restore, open this app's card on the [kitshn map](https://kit.yarden-zamir.com),
-choose **Backups…**, select a successful run, then **Restore** and confirm its time.
-kitshn takes a `before-restore` snapshot, restores the volume, and restarts the app.
-To reverse it, restore that `before-restore` run. Allow disk space for a second copy.
-See [kitshn's backup and restore rules](https://github.com/Yarden-zamir/kitshn/blob/main/docs/internals/logs-and-backups.md#backups)
-(K-1815–K-1820) for the backup key, storage limits and retention.
+## Backups
 
-Record sync uploads pages of 100 encrypted records as one JSON request, with no
-byte-based split. The default per-record check permits 1 GiB of encrypted text:
-100 records could total 100 GiB plus JSON metadata, exceeding Cloudflare's 100 MB
-cap. In this release, Axum's JSON extractor has an earlier 2 MiB request limit
-(there is no server override), so even a much smaller page can get HTTP 413.
-Total database size does not determine request size. Before importing large
-threads, check serialized upload pages against 2 MiB; oversized pages require a
-client batching or server change. Packfile transfers use a separate blob upload
-path and are not enabled by this server configuration.
+kitshn backs up the volume every day to encrypted R2 snapshots (K-1811).
+To restore, open the card on the [kitshn map](https://kit.yarden-zamir.com), choose **Backups…**, then **Restore**.
+kitshn takes a `before-restore` snapshot first, so you can undo a restore.
+See [backups and restore](https://github.com/Yarden-zamir/kitshn/blob/main/docs/internals/logs-and-backups.md#backups) (K-1815 to K-1820).
+
+## Known limits
+
+- A sync request still passes through Cloudflare, which refuses bodies over 100 MB.
+  One page holds 100 records, so a page over 100 MB needs records of about 1 MB each on average.
+  Revisit if a sync fails with 413 from Cloudflare.
 
 MIT licensed.
